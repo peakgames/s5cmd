@@ -15,6 +15,7 @@ import (
 	"github.com/peak/s5cmd/parallel"
 	"github.com/peak/s5cmd/storage"
 	"github.com/peak/s5cmd/storage/url"
+	"github.com/peak/s5cmd/strutil"
 )
 
 var selectHelpTemplate = `Name:
@@ -47,6 +48,10 @@ var selectCommandFlags = []cli.Flag{
 		Usage: "input data format (only JSON supported for the moment)",
 		Value: "JSON",
 	},
+	&cli.StringFlag{
+		Name:  "exclude",
+		Usage: "exclude objects with given pattern",
+	},
 }
 
 var selectCommand = &cli.Command{
@@ -72,6 +77,7 @@ var selectCommand = &cli.Command{
 			// flags
 			query:           c.String("query"),
 			compressionType: c.String("compression"),
+			exclude:         c.String("exclude"),
 
 			storageOpts: NewStorageOpts(c),
 		}.Run(c.Context)
@@ -86,6 +92,7 @@ type Select struct {
 
 	query           string
 	compressionType string
+	exclude         string
 
 	// s3 options
 	storageOpts storage.Options
@@ -166,8 +173,11 @@ func (s Select) Run(ctx context.Context) error {
 			continue
 		}
 
-		task := s.prepareTask(ctx, client, object.URL, resultCh)
-		parallel.Run(task, waiter)
+		if s.exclude == "" || !strutil.RegexMatch(s.exclude, object.URL.Path) {
+			task := s.prepareTask(ctx, client, object.URL, resultCh)
+			parallel.Run(task, waiter)
+		}
+
 	}
 
 	waiter.Wait()
@@ -205,7 +215,7 @@ func validateSelectCommand(c *cli.Context) error {
 		return fmt.Errorf("source must be remote")
 	}
 
-      if !strings.EqualFold(c.String("format"), "JSON") {
+	if !strings.EqualFold(c.String("format"), "JSON") {
 		return fmt.Errorf("only json supported")
 	}
 

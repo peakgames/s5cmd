@@ -183,3 +183,33 @@ func TestDiskUsageMissingObject(t *testing.T) {
 		0: suffix(`0 bytes in 0 objects: s3://%v/non-existent-file`, bucket),
 	})
 }
+
+// du --exclude "main*" s3://bucket/*.txt
+func TestDiskUsageWildcardWithExcludeFilter(t *testing.T) {
+	t.Parallel()
+
+	bucket := s3BucketFromTestName(t)
+
+	s3client, s5cmd, cleanup := setup(t)
+	defer cleanup()
+
+	const excludePattern = "main*"
+
+	createBucket(t, s3client, bucket)
+	putFile(t, s3client, bucket, "testfile1.txt", "this is a file content")
+	putFile(t, s3client, bucket, "testfile2.txt", "this is also a file content")
+	putFile(t, s3client, bucket, "main.txt", "this is also a file content")
+	putFile(t, s3client, bucket, "main2.txt", "this is also a file content")
+	putFile(t, s3client, bucket, "main.py", "this is a python file")
+	putFile(t, s3client, bucket, "foo/testfile3.txt", "this is also a file content somehow")
+	putFile(t, s3client, bucket, "bar/testfile3.gz", "this is also a file content somehow")
+
+	cmd := s5cmd("du", "--exclude", excludePattern, "s3://"+bucket+"/*.txt")
+	result := icmd.RunCmd(cmd)
+
+	result.Assert(t, icmd.Success)
+
+	assertLines(t, result.Stdout(), map[int]compareFunc{
+		0: suffix(`973 bytes in 3 objects: s3://%v/*.txt`, bucket),
+	})
+}

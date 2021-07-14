@@ -30,6 +30,9 @@ Examples:
 
 	2. Show disk usage of all objects that match a wildcard, grouped by storage class
 		 > s5cmd {{.HelpName}} --group s3://bucket/prefix/obj*.gz
+
+	3. Show disk usage of all objects in a bucket but exclude the ones with ".py" extension
+		 > s5cmd {{.HelpName}} --exclude "*.py" s3://bucket/*
 `
 
 var sizeCommand = &cli.Command{
@@ -47,6 +50,10 @@ var sizeCommand = &cli.Command{
 			Name:    "humanize",
 			Aliases: []string{"H"},
 			Usage:   "human-readable output for object sizes",
+		},
+		&cli.StringFlag{
+			Name:  "exclude",
+			Usage: "exclude objects with given pattern",
 		},
 	},
 	Before: func(c *cli.Context) error {
@@ -66,6 +73,7 @@ var sizeCommand = &cli.Command{
 			// flags
 			groupByClass: c.Bool("group"),
 			humanize:     c.Bool("humanize"),
+			exclude:      c.String("exclude"),
 
 			storageOpts: NewStorageOpts(c),
 		}.Run(c.Context)
@@ -81,6 +89,7 @@ type Size struct {
 	// flags
 	groupByClass bool
 	humanize     bool
+	exclude      string
 
 	storageOpts storage.Options
 }
@@ -113,12 +122,14 @@ func (sz Size) Run(ctx context.Context) error {
 			printError(sz.fullCommand, sz.op, err)
 			continue
 		}
-		storageClass := string(object.StorageClass)
-		s := storageTotal[storageClass]
-		s.addObject(object)
-		storageTotal[storageClass] = s
+		if sz.exclude == "" || !strutil.RegexMatch(sz.exclude, object.URL.Path) {
+			storageClass := string(object.StorageClass)
+			s := storageTotal[storageClass]
+			s.addObject(object)
+			storageTotal[storageClass] = s
 
-		total.addObject(object)
+			total.addObject(object)
+		}
 	}
 
 	if !sz.groupByClass {

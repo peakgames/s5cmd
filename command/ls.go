@@ -39,6 +39,9 @@ Examples:
 
 	5. List all objects in a public bucket
 		 > s5cmd --no-sign-request {{.HelpName}} s3://bucket/*
+
+	6. List all objects in a bucket but exclude the ones with prefix abc
+		 > s5cmd {{.HelpName}} --exclude "abc*" s3://bucket/*
 `
 
 var listCommand = &cli.Command{
@@ -61,6 +64,10 @@ var listCommand = &cli.Command{
 			Name:    "storage-class",
 			Aliases: []string{"s"},
 			Usage:   "display full name of the object class",
+		},
+		&cli.StringFlag{
+			Name:  "exclude",
+			Usage: "exclude objects with given pattern",
 		},
 	},
 	Before: func(c *cli.Context) error {
@@ -88,6 +95,7 @@ var listCommand = &cli.Command{
 			showEtag:         c.Bool("etag"),
 			humanize:         c.Bool("humanize"),
 			showStorageClass: c.Bool("storage-class"),
+			exclude:          c.String("exclude"),
 
 			storageOpts: NewStorageOpts(c),
 		}.Run(c.Context)
@@ -104,6 +112,7 @@ type List struct {
 	showEtag         bool
 	humanize         bool
 	showStorageClass bool
+	exclude          string
 
 	storageOpts storage.Options
 }
@@ -156,14 +165,17 @@ func (l List) Run(ctx context.Context) error {
 			continue
 		}
 
-		msg := ListMessage{
-			Object:           object,
-			showEtag:         l.showEtag,
-			showHumanized:    l.humanize,
-			showStorageClass: l.showStorageClass,
+		if l.exclude == "" || !strutil.RegexMatch(l.exclude, object.URL.Path) {
+			msg := ListMessage{
+				Object:           object,
+				showEtag:         l.showEtag,
+				showHumanized:    l.humanize,
+				showStorageClass: l.showStorageClass,
+			}
+
+			log.Info(msg)
 		}
 
-		log.Info(msg)
 	}
 
 	return merror

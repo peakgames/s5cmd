@@ -20,6 +20,7 @@ import (
 	"github.com/peak/s5cmd/parallel"
 	"github.com/peak/s5cmd/storage"
 	"github.com/peak/s5cmd/storage/url"
+	"github.com/peak/s5cmd/strutil"
 )
 
 const (
@@ -146,6 +147,10 @@ var copyCommandFlags = []cli.Flag{
 		Name:  "destination-region",
 		Usage: "set the region of destination bucket: the region of the destination bucket will be automatically discovered if --destination-region is not specified",
 	},
+	&cli.StringFlag{
+		Name:  "exclude",
+		Usage: "exclude objects with given pattern",
+	},
 }
 
 var copyCommand = &cli.Command{
@@ -183,6 +188,7 @@ var copyCommand = &cli.Command{
 			encryptionKeyID:      c.String("sse-kms-key-id"),
 			acl:                  c.String("acl"),
 			forceGlacierTransfer: c.Bool("force-glacier-transfer"),
+			exclude:              c.String("exclude"),
 			// region settings
 			srcRegion: c.String("source-region"),
 			dstRegion: c.String("destination-region"),
@@ -212,6 +218,7 @@ type Copy struct {
 	encryptionKeyID      string
 	acl                  string
 	forceGlacierTransfer bool
+	exclude              string
 
 	// region settings
 	srcRegion string
@@ -305,18 +312,21 @@ func (c Copy) Run(ctx context.Context) error {
 		srcurl := object.URL
 		var task parallel.Task
 
-		switch {
-		case srcurl.Type == dsturl.Type: // local->local or remote->remote
-			task = c.prepareCopyTask(ctx, srcurl, dsturl, isBatch)
-		case srcurl.IsRemote(): // remote->local
-			task = c.prepareDownloadTask(ctx, srcurl, dsturl, isBatch)
-		case dsturl.IsRemote(): // local->remote
-			task = c.prepareUploadTask(ctx, srcurl, dsturl, isBatch)
-		default:
-			panic("unexpected src-dst pair")
+		if c.exclude == "" || !strutil.RegexMatch(c.exclude, srcurl.Path) {
+			switch {
+			case srcurl.Type == dsturl.Type: // local->local or remote->remote
+				task = c.prepareCopyTask(ctx, srcurl, dsturl, isBatch)
+			case srcurl.IsRemote(): // remote->local
+				task = c.prepareDownloadTask(ctx, srcurl, dsturl, isBatch)
+			case dsturl.IsRemote(): // local->remote
+				task = c.prepareUploadTask(ctx, srcurl, dsturl, isBatch)
+			default:
+				panic("unexpected src-dst pair")
+			}
+
+			parallel.Run(task, waiter)
 		}
 
-		parallel.Run(task, waiter)
 	}
 
 	waiter.Wait()

@@ -603,3 +603,115 @@ func TestRemoveMultipleS3ObjectsDryRun(t *testing.T) {
 		assert.Assert(t, ensureS3Object(s3client, bucket, filename, content))
 	}
 }
+
+// rm --exclude "*.txt" s3://bucket/*
+func TestRemoveMultipleS3ObjectsWithExcludeFilter(t *testing.T) {
+	t.Parallel()
+
+	bucket := s3BucketFromTestName(t)
+
+	s3client, s5cmd, cleanup := setup(t)
+	defer cleanup()
+
+	createBucket(t, s3client, bucket)
+	const excludePattern = "*.txt"
+
+	filesToContent := map[string]string{
+		"testfile1.txt":          "this is a test file 1",
+		"readme.md":              "this is a readme file",
+		"filename-with-hypen.gz": "file has hypen in its name",
+		"another_test_file.txt":  "yet another txt file. yatf.",
+		"a/file.txt":             "this is a txt file",
+		"b/main.txt":             "this is the second txt file",
+		"a/file.py":              "this is a python file with prefix a",
+	}
+
+	expectedFiles := map[string]string{
+		"testfile1.txt":         "this is a test file 1",
+		"another_test_file.txt": "yet another txt file. yatf.",
+		"a/file.txt":            "this is a txt file",
+		"b/main.txt":            "this is the second txt file",
+	}
+
+	nonExpectedFiles := map[string]string{
+		"readme.md":              "this is a readme file",
+		"filename-with-hypen.gz": "file has hypen in its name",
+		"a/file.py":              "this is a python file with prefix a",
+	}
+
+	for filename, content := range filesToContent {
+		putFile(t, s3client, bucket, filename, content)
+	}
+
+	cmd := s5cmd("rm", "--exclude", excludePattern, "s3://"+bucket+"/*")
+	result := icmd.RunCmd(cmd)
+
+	result.Assert(t, icmd.Success)
+
+	assertLines(t, result.Stderr(), map[int]compareFunc{})
+
+	assertLines(t, result.Stdout(), map[int]compareFunc{
+		0: equals(`rm s3://%v/a/file.py`, bucket),
+		1: equals(`rm s3://%v/filename-with-hypen.gz`, bucket),
+		2: equals(`rm s3://%v/readme.md`, bucket),
+	}, sortInput(true))
+
+	// assert s3 objects were not removed
+	for filename, content := range expectedFiles {
+		assert.Assert(t, ensureS3Object(s3client, bucket, filename, content))
+	}
+
+	// assert s3 objects should be removed
+	for filename, content := range nonExpectedFiles {
+		err := ensureS3Object(s3client, bucket, filename, content)
+		assertError(t, err, errS3NoSuchKey)
+	}
+}
+
+// rm --exclude "" s3://bucket/*
+func TestRemoveS3ObjectsExcludePatternEmpty(t *testing.T) {
+	t.Parallel()
+
+	s3client, s5cmd, cleanup := setup(t)
+	defer cleanup()
+
+	bucket := s3BucketFromTestName(t)
+	createBucket(t, s3client, bucket)
+
+	const excludePattern = ""
+
+	filesToContent := map[string]string{
+		"testdir1/file1.txt":     "file1 content",
+		"testdir1/file2.txt":     "file2 content",
+		"testdir1/dir/file3.txt": "file23content",
+		"file4.txt":              "file4 content",
+		"testdir2/file5.txt":     "file5 content",
+		"testdir2/file6.txt":     "file6 content",
+	}
+
+	for filename, content := range filesToContent {
+		putFile(t, s3client, bucket, filename, content)
+	}
+
+	cmd := s5cmd("rm", "--exclude", excludePattern, "s3://"+bucket+"/*")
+	result := icmd.RunCmd(cmd)
+
+	result.Assert(t, icmd.Success)
+
+	assertLines(t, result.Stderr(), map[int]compareFunc{})
+
+	assertLines(t, result.Stdout(), map[int]compareFunc{
+		0: equals(`rm s3://%v/file4.txt`, bucket),
+		1: equals(`rm s3://%v/testdir1/dir/file3.txt`, bucket),
+		2: equals(`rm s3://%v/testdir1/file1.txt`, bucket),
+		3: equals(`rm s3://%v/testdir1/file2.txt`, bucket),
+		4: equals(`rm s3://%v/testdir2/file5.txt`, bucket),
+		5: equals(`rm s3://%v/testdir2/file6.txt`, bucket),
+	}, sortInput(true))
+
+	// assert s3 objects not in s3 bucket.
+	for filename, content := range filesToContent {
+		err := ensureS3Object(s3client, bucket, filename, content)
+		assertError(t, err, errS3NoSuchKey)
+	}
+}
