@@ -101,7 +101,7 @@ github.com/stretchr/testify/assert
 github.com/stretchr/testify/mock
 # github.com/termie/go-shutil v0.0.0-20140729215957-bcacb06fecae
 github.com/termie/go-shutil
-# github.com/urfave/cli/v2 v2.2.0
+# github.com/urfave/cli/v2 v2.2.0 => github.com/ocakhasan/cli/v2 v2.4.0
 github.com/urfave/cli/v2
 # golang.org/x/sys v0.0.0-20190422165155-953cdadca894
 golang.org/x/sys/unix

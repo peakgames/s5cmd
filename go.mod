@@ -23,3 +23,4 @@ require (
 )
 
 replace github.com/johannesboyne/gofakes3 => github.com/igungor/gofakes3 v0.0.6
+replace github.com/urfave/cli/v2 => github.com/ocakhasan/cli/v2 v2.4.0
