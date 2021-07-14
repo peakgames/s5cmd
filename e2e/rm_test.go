@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"fmt"
+	"runtime"
 	"testing"
 
 	"gotest.tools/v3/assert"
@@ -380,6 +381,62 @@ func TestRemoveLocalDirectory(t *testing.T) {
 
 	// expected empty dir
 	expected := fs.Expected(t, fs.WithDir("testdir"))
+	assert.Assert(t, fs.Equal(workdir.Path(), expected))
+}
+
+// rm prefix*
+func TestRemoveLocalDirectoryWithGlob(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("Files in Windows cannot contain glob(*) characters")
+	}
+
+	_, s5cmd, cleanup := setup(t)
+	defer cleanup()
+
+	folderLayout := []fs.PathOp{
+		fs.WithDir(
+			"abc*",
+			fs.WithFile("file1.txt", "this is the first test file"),
+			fs.WithFile("file2.txt", "this is the second test file"),
+		),
+		fs.WithDir(
+			"abcd",
+			fs.WithFile("file1.txt", "this is the first test file"),
+		),
+		fs.WithDir(
+			"abcde",
+			fs.WithFile("file1.txt", "this is the first test file"),
+			fs.WithFile("file2.txt", "this is the second test file"),
+		),
+	}
+
+	workdir := fs.NewDir(t, t.Name(), folderLayout...)
+	defer workdir.Remove()
+
+	cmd := s5cmd("rm", "abc*")
+	result := icmd.RunCmd(cmd, withWorkingDir(workdir))
+
+	result.Assert(t, icmd.Success)
+
+	assertLines(t, result.Stdout(), map[int]compareFunc{
+		0: equals("rm abc*/file1.txt"),
+		1: equals("rm abc*/file2.txt"),
+		2: equals("rm abcd/file1.txt"),
+		3: equals("rm abcde/file1.txt"),
+		4: equals("rm abcde/file2.txt"),
+	}, sortInput(true))
+
+	assertLines(t, result.Stderr(), map[int]compareFunc{})
+
+	// expected 3 empty dirs
+	expected := fs.Expected(
+		t,
+		fs.WithDir("abc*"),
+		fs.WithDir("abcd"),
+		fs.WithDir("abcde"),
+	)
 	assert.Assert(t, fs.Equal(workdir.Path(), expected))
 }
 

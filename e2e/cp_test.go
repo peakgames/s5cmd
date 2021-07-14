@@ -1109,6 +1109,62 @@ func TestCopyMultipleFilesToS3WithPrefixWithoutSlash(t *testing.T) {
 	assert.Assert(t, fs.Equal(workdir.Path(), expected))
 }
 
+// cp prefix* s3://bucket/
+func TestCopyDirectoryWithGlobCharactersToS3Bucket(t *testing.T) {
+	t.Parallel()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("Files in Windows cannot contain glob(*) characters")
+	}
+
+	bucket := s3BucketFromTestName(t)
+
+	s3client, s5cmd, cleanup := setup(t)
+	defer cleanup()
+
+	createBucket(t, s3client, bucket)
+
+	folderLayout := []fs.PathOp{
+		fs.WithDir(
+			"abc*",
+			fs.WithFile("file1.txt", "this is the first test file"),
+			fs.WithFile("file2.txt", "this is the second test file"),
+		),
+		fs.WithDir(
+			"abcd",
+			fs.WithFile("file1.txt", "this is the first test file"),
+		),
+		fs.WithDir(
+			"abcde",
+			fs.WithFile("file1.txt", "this is the first test file"),
+			fs.WithFile("file2.txt", "this is the second test file"),
+		),
+	}
+
+	workdir := fs.NewDir(t, "somedir", folderLayout...)
+	defer workdir.Remove()
+
+	src := fmt.Sprintf("%v/abc*", workdir.Path())
+	dst := fmt.Sprintf("s3://%v", bucket)
+
+	cmd := s5cmd("cp", src, dst)
+	result := icmd.RunCmd(cmd)
+
+	result.Assert(t, icmd.Success)
+
+	assertLines(t, result.Stdout(), map[int]compareFunc{
+		0: equals(`cp %v/abc*/file1.txt %v/abc*/file1.txt`, workdir.Path(), dst),
+		1: equals(`cp %v/abc*/file2.txt %v/abc*/file2.txt`, workdir.Path(), dst),
+		2: equals(`cp %v/abcd/file1.txt %v/abcd/file1.txt`, workdir.Path(), dst),
+		3: equals(`cp %v/abcde/file1.txt %v/abcde/file1.txt`, workdir.Path(), dst),
+		4: equals(`cp %v/abcde/file2.txt %v/abcde/file2.txt`, workdir.Path(), dst),
+	}, sortInput(true))
+
+	// assert local filesystem
+	expected := fs.Expected(t, folderLayout...)
+	assert.Assert(t, fs.Equal(workdir.Path(), expected))
+}
+
 // cp dir/* s3://bucket/prefix/
 func TestCopyMultipleFilesToS3WithPrefixWithSlash(t *testing.T) {
 	t.Parallel()
