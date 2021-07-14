@@ -208,6 +208,24 @@ func (m Metadata) SetACL(acl string) Metadata {
 	return m
 }
 
+func (m Metadata) CacheControl() string {
+	return m["CacheControl"]
+}
+
+func (m Metadata) SetCacheControl(cacheControl string) Metadata {
+	m["CacheControl"] = cacheControl
+	return m
+}
+
+func (m Metadata) Expires() string {
+	return m["Expires"]
+}
+
+func (m Metadata) SetExpires(expires string) Metadata {
+	m["Expires"] = expires
+	return m
+}
+
 func (m Metadata) StorageClass() string {
 	return m["StorageClass"]
 }

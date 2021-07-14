@@ -61,6 +61,9 @@ var moveCommand = &cli.Command{
 			encryptionMethod: c.String("sse"),
 			encryptionKeyID:  c.String("sse-kms-key-id"),
 			acl:              c.String("acl"),
+			cacheControl:     c.String("cache-control"),
+			expires:          c.String("expires"),
+
 
 			storageOpts: NewStorageOpts(c),
 		}

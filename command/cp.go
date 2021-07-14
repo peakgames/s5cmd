@@ -134,6 +134,14 @@ var copyCommandFlags = []cli.Flag{
 		Name:  "acl",
 		Usage: "set acl for target: defines granted accesses and their types on different accounts/groups",
 	},
+	&cli.StringFlag{
+		Name:  "cache-control",
+		Usage: "set cache control for target: defines cache control header for object",
+	},
+	&cli.StringFlag{
+		Name:  "expires",
+		Usage: "set expires for target (uses RFC3339 format): defines expires header for object",
+	},
 	&cli.BoolFlag{
 		Name:  "force-glacier-transfer",
 		Usage: "force transfer of GLACIER objects whether they are restored or not",
@@ -183,6 +191,8 @@ var copyCommand = &cli.Command{
 			encryptionKeyID:      c.String("sse-kms-key-id"),
 			acl:                  c.String("acl"),
 			forceGlacierTransfer: c.Bool("force-glacier-transfer"),
+			cacheControl:         c.String("cache-control"),
+			expires:              c.String("expires"),
 			// region settings
 			srcRegion: c.String("source-region"),
 			dstRegion: c.String("destination-region"),
@@ -212,6 +222,9 @@ type Copy struct {
 	encryptionKeyID      string
 	acl                  string
 	forceGlacierTransfer bool
+	cacheControl         string
+	expires              string
+
 
 	// region settings
 	srcRegion string
@@ -472,7 +485,9 @@ func (c Copy) doUpload(ctx context.Context, srcurl *url.URL, dsturl *url.URL) er
 		SetStorageClass(string(c.storageClass)).
 		SetSSE(c.encryptionMethod).
 		SetSSEKeyID(c.encryptionKeyID).
-		SetACL(c.acl)
+		SetACL(c.acl).
+		SetCacheControl(c.cacheControl).
+		SetExpires(c.expires)
 
 	err = dstClient.Put(ctx, file, dsturl, metadata, c.concurrency, c.partSize)
 	if err != nil {
@@ -518,7 +533,9 @@ func (c Copy) doCopy(ctx context.Context, srcurl, dsturl *url.URL) error {
 		SetStorageClass(string(c.storageClass)).
 		SetSSE(c.encryptionMethod).
 		SetSSEKeyID(c.encryptionKeyID).
-		SetACL(c.acl)
+		SetACL(c.acl).
+		SetCacheControl(c.cacheControl).
+		SetExpires(c.expires)
 
 	err = c.shouldOverride(ctx, srcurl, dsturl)
 	if err != nil {
