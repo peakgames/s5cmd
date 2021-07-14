@@ -146,6 +146,10 @@ var copyCommandFlags = []cli.Flag{
 		Name:  "destination-region",
 		Usage: "set the region of destination bucket: the region of the destination bucket will be automatically discovered if --destination-region is not specified",
 	},
+	&cli.BoolFlag{
+		Name:  "raw",
+		Usage: "disable the wildcard operations, useful with filenames that contains glob characters.",
+	},
 }
 
 var copyCommand = &cli.Command{
@@ -183,6 +187,7 @@ var copyCommand = &cli.Command{
 			encryptionKeyID:      c.String("sse-kms-key-id"),
 			acl:                  c.String("acl"),
 			forceGlacierTransfer: c.Bool("force-glacier-transfer"),
+			raw:                  c.Bool("raw"),
 			// region settings
 			srcRegion: c.String("source-region"),
 			dstRegion: c.String("destination-region"),
@@ -212,6 +217,7 @@ type Copy struct {
 	encryptionKeyID      string
 	acl                  string
 	forceGlacierTransfer bool
+	raw                  bool
 
 	// region settings
 	srcRegion string
@@ -232,12 +238,14 @@ increase the open file limit or try to decrease the number of workers with
 // Run starts copying given source objects to destination.
 func (c Copy) Run(ctx context.Context) error {
 	srcurl, err := url.New(c.src)
+
 	if err != nil {
 		printError(c.fullCommand, c.op, err)
 		return err
 	}
 
 	dsturl, err := url.New(c.dst)
+
 	if err != nil {
 		printError(c.fullCommand, c.op, err)
 		return err
@@ -253,7 +261,11 @@ func (c Copy) Run(ctx context.Context) error {
 		return err
 	}
 
-	objch, err := expandSource(ctx, client, c.followSymlinks, srcurl)
+	objch := rawSource(srcurl, c.followSymlinks)
+	if !c.raw {
+		objch, err = expandSource(ctx, client, c.followSymlinks, srcurl)
+	}
+
 	if err != nil {
 		printError(c.fullCommand, c.op, err)
 		return err
@@ -280,7 +292,8 @@ func (c Copy) Run(ctx context.Context) error {
 		}
 	}()
 
-	isBatch := srcurl.HasGlob()
+	// use --raw flag to prevent glob operations.
+	isBatch := !c.raw && srcurl.HasGlob()
 	if !isBatch && !srcurl.IsRemote() {
 		obj, _ := client.Stat(ctx, srcurl)
 		isBatch = obj != nil && obj.Type.IsDir()
@@ -357,7 +370,6 @@ func (c Copy) prepareDownloadTask(
 		if err != nil {
 			return err
 		}
-
 		err = c.doDownload(ctx, srcurl, dsturl)
 		if err != nil {
 			return &errorpkg.Error{

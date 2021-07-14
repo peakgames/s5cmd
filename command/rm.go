@@ -37,10 +37,18 @@ Examples:
 		 > s5cmd {{.HelpName}} s3://bucketname/prefix/* s3://bucketname/object1.gz
 `
 
+var deleteCommandFlags = []cli.Flag{
+	&cli.BoolFlag{
+		Name:  "raw",
+		Usage: "disable the wildcard operations, useful with filenames that contains glob characters.",
+	},
+}
+
 var deleteCommand = &cli.Command{
 	Name:               "rm",
 	HelpName:           "rm",
 	Usage:              "remove objects",
+	Flags:              deleteCommandFlags,
 	CustomHelpTemplate: deleteHelpTemplate,
 	Before: func(c *cli.Context) error {
 		err := validateRMCommand(c)
@@ -55,6 +63,7 @@ var deleteCommand = &cli.Command{
 			src:         c.Args().Slice(),
 			op:          c.Command.Name,
 			fullCommand: givenCommand(c),
+			raw:         c.Bool("raw"),
 			storageOpts: NewStorageOpts(c),
 		}.Run(c.Context)
 	},
@@ -65,6 +74,7 @@ type Delete struct {
 	src         []string
 	op          string
 	fullCommand string
+	raw         bool
 
 	// storage options
 	storageOpts storage.Options
@@ -85,7 +95,10 @@ func (d Delete) Run(ctx context.Context) error {
 		return err
 	}
 
-	objChan := expandSources(ctx, client, false, srcurls...)
+	objChan := rawSourceUrls(srcurls, false)
+	if !d.raw {
+		objChan = expandSources(ctx, client, false, srcurls...)
+	}
 
 	// do object->url transformation
 	urlch := make(chan *url.URL)

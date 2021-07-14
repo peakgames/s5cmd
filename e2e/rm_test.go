@@ -603,3 +603,132 @@ func TestRemoveMultipleS3ObjectsDryRun(t *testing.T) {
 		assert.Assert(t, ensureS3Object(s3client, bucket, filename, content))
 	}
 }
+
+func TestRemoveS3ObjectRawFlag(t *testing.T) {
+	t.Parallel()
+
+	bucket := s3BucketFromTestName(t)
+
+	s3client, s5cmd, cleanup := setup(t)
+	defer cleanup()
+
+	createBucket(t, s3client, bucket)
+
+	filesToContent := map[string]string{
+		"file*.txt":  "this is a test file 1",
+		"file*1.txt": "this is a test file 2",
+		"file*.py":   "test file 1 python version",
+		"file*.c":    "test file 1 c version.",
+	}
+
+	nonDeletedFiles := map[string]string{
+		"file*1.txt": "this is a test file 2",
+		"file*.py":   "test file 1 python version",
+		"file*.c":    "test file 1 c version.",
+	}
+
+	for filename, content := range filesToContent {
+		putFile(t, s3client, bucket, filename, content)
+	}
+
+	cmd := s5cmd("rm", "-raw", "s3://"+bucket+"/file*.txt")
+	result := icmd.RunCmd(cmd)
+
+	result.Assert(t, icmd.Success)
+
+	assertLines(t, result.Stderr(), map[int]compareFunc{})
+
+	assertLines(t, result.Stdout(), map[int]compareFunc{
+		0: equals(`rm s3://%v/file*.txt`, bucket),
+	})
+
+	// ensure files which is not supposed to be deleted.
+	for filename, content := range nonDeletedFiles {
+		assert.Assert(t, ensureS3Object(s3client, bucket, filename, content))
+	}
+}
+
+func TestRemoveS3ObjectsPrefixRawFlag(t *testing.T) {
+	t.Parallel()
+
+	bucket := s3BucketFromTestName(t)
+
+	s3client, s5cmd, cleanup := setup(t)
+	defer cleanup()
+
+	createBucket(t, s3client, bucket)
+
+	filesToContent := map[string]string{
+		"abc*/file.txt":  "this is a test file 1",
+		"abc*/file1.txt": "this is a test file 2",
+		"abc*/file.py":   "test file 1 python version",
+		"abc*/file.c":    "test file 1 c version.",
+		"abcd/file.txt":  "this is a test file with different prefix",
+	}
+
+	nonDeletedFiles := map[string]string{
+		"abc*/file1.txt": "this is a test file 2",
+		"abc*/file.py":   "test file 1 python version",
+		"abc*/file.c":    "test file 1 c version.",
+		"abcd/file.txt":  "this is a test file with different prefix",
+	}
+
+	for filename, content := range filesToContent {
+		putFile(t, s3client, bucket, filename, content)
+	}
+
+	cmd := s5cmd("rm", "-raw", "s3://"+bucket+"/abc*/file.txt")
+	result := icmd.RunCmd(cmd)
+
+	result.Assert(t, icmd.Success)
+
+	assertLines(t, result.Stderr(), map[int]compareFunc{})
+
+	assertLines(t, result.Stdout(), map[int]compareFunc{
+		0: equals(`rm s3://%v/abc*/file.txt`, bucket),
+	})
+
+	// ensure files which is not supposed to be deleted.
+	for filename, content := range nonDeletedFiles {
+		assert.Assert(t, ensureS3Object(s3client, bucket, filename, content))
+	}
+}
+
+func TestRemoveS3PrefixRawFlag(t *testing.T) {
+	t.Parallel()
+
+	bucket := s3BucketFromTestName(t)
+
+	s3client, s5cmd, cleanup := setup(t)
+	defer cleanup()
+
+	createBucket(t, s3client, bucket)
+
+	filesToContent := map[string]string{
+		"abc*/file.txt":  "this is a test file 1",
+		"abc*/file1.txt": "this is a test file 2",
+		"abc*/file.py":   "test file 1 python version",
+		"abc*/file.c":    "test file 1 c version.",
+		"abcd/file.txt":  "this is a test file with different prefix",
+	}
+
+	for filename, content := range filesToContent {
+		putFile(t, s3client, bucket, filename, content)
+	}
+
+	cmd := s5cmd("rm", "-raw", "s3://"+bucket+"/abc*")
+	result := icmd.RunCmd(cmd)
+
+	result.Assert(t, icmd.Success)
+
+	assertLines(t, result.Stderr(), map[int]compareFunc{})
+
+	assertLines(t, result.Stdout(), map[int]compareFunc{
+		0: equals(`rm s3://%v/abc*`, bucket), // It prints but does not delete.
+	})
+
+	// all of the files should be in S3
+	for filename, content := range filesToContent {
+		assert.Assert(t, ensureS3Object(s3client, bucket, filename, content))
+	}
+}

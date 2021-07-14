@@ -15,14 +15,14 @@ var removeBucketHelpTemplate = `Name:
 	{{.HelpName}} - {{.Usage}}
 
 Usage:
-	{{.HelpName}} bucketname
+	{{.HelpName}} s3://bucketname
 
 Options:
 	{{range .VisibleFlags}}{{.}}
 	{{end}}
 Examples:
 	1. Deletes S3 bucket with given name
-		 > s5cmd {{.HelpName}} bucketname
+		 > s5cmd {{.HelpName}} s3://bucketname
 `
 
 var removeBucketCommand = &cli.Command{

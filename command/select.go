@@ -205,7 +205,7 @@ func validateSelectCommand(c *cli.Context) error {
 		return fmt.Errorf("source must be remote")
 	}
 
-      if !strings.EqualFold(c.String("format"), "JSON") {
+	if !strings.EqualFold(c.String("format"), "JSON") {
 		return fmt.Errorf("only json supported")
 	}
 

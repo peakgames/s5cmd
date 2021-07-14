@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"sort"
 	"testing"
 
@@ -326,6 +327,70 @@ func TestExpandSource_Do_Not_Follow_Symlinks(t *testing.T) {
 	}
 	workdirJoin := filepath.ToSlash(workdir.Join("a/f1.txt"))
 	assert.Equal(t, []string{workdirJoin}, expected)
+}
+
+func TestRawSourceWithoutSymLinks(t *testing.T) {
+
+	if runtime.GOOS == "windows" {
+		t.Skip()
+	}
+	fileContent := "CAFEBABE"
+	folderLayout := []fs.PathOp{
+		fs.WithDir(
+			"a",
+			fs.WithFile("f1*.txt", fileContent),
+			fs.WithFile("f1*1.txt", fileContent),
+		),
+		fs.WithDir("b"),
+		fs.WithDir("c"),
+	}
+
+	workdir := fs.NewDir(t, t.Name(), folderLayout...)
+	defer workdir.Remove()
+
+	workdirUrl, _ := url.New(workdir.Join("a", "f1*.txt"))
+
+	//do not follow symbolic links
+	ch := rawSource(workdirUrl, false)
+	var expected []string
+	for obj := range ch {
+		expected = append(expected, obj.URL.Absolute())
+	}
+	workdirJoin := filepath.ToSlash(workdir.Join("a/f1*.txt"))
+	assert.Equal(t, []string{workdirJoin}, expected)
+}
+
+func TestRawSourceUrlsWithoutSymLinks(t *testing.T) {
+
+	if runtime.GOOS == "windows" {
+		t.Skip()
+	}
+	fileContent := "CAFEBABE"
+	folderLayout := []fs.PathOp{
+		fs.WithDir(
+			"a",
+			fs.WithFile("f1*.txt", fileContent),
+			fs.WithFile("f1*1.txt", fileContent),
+		),
+		fs.WithDir("b"),
+		fs.WithDir("c"),
+	}
+
+	workdir := fs.NewDir(t, t.Name(), folderLayout...)
+	defer workdir.Remove()
+
+	workdirUrl, _ := url.New(workdir.Join("a", "f1*.txt"))
+	secondWorkdirUrl, _ := url.New(workdir.Join("a", "f1*1.txt"))
+
+	//do not follow symbolic links
+	ch := rawSourceUrls([]*url.URL{workdirUrl, secondWorkdirUrl}, false)
+	var expected []string
+	for obj := range ch {
+		expected = append(expected, obj.URL.Absolute())
+	}
+	workdirJoin := filepath.ToSlash(workdir.Join("a/f1*.txt"))
+	secondWorkdirJoin := filepath.ToSlash(workdir.Join("a/f1*1.txt"))
+	assert.Equal(t, []string{workdirJoin, secondWorkdirJoin}, expected)
 }
 
 func keys(urls map[string][]*storage.Object) []string {
